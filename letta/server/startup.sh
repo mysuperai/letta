@@ -3,6 +3,38 @@ set -e  # Exit on any error
 
 HOST="${HOST:-0.0.0.0}"
 PORT="${PORT:-8283}"
+LETTA_CONFIG_DIR="${LETTA_CONFIG_DIR:-}"
+
+# Function to load configuration from mounted volume
+load_config() {
+    if [ -n "$LETTA_CONFIG_DIR" ] && [ -d "$LETTA_CONFIG_DIR" ]; then
+        echo "Loading configuration from $LETTA_CONFIG_DIR..."
+        
+        # Load environment variables from .env file if it exists
+        if [ -f "$LETTA_CONFIG_DIR/.env" ]; then
+            echo "Loading environment variables from $LETTA_CONFIG_DIR/.env"
+            set -a  # Automatically export variables
+            . "$LETTA_CONFIG_DIR/.env"
+            set +a
+        fi
+        
+        # Copy custom alembic.ini if it exists
+        if [ -f "$LETTA_CONFIG_DIR/alembic.ini" ]; then
+            echo "Using custom alembic configuration from $LETTA_CONFIG_DIR/alembic.ini"
+            cp "$LETTA_CONFIG_DIR/alembic.ini" /app/alembic.ini
+        fi
+        
+        # Set custom OpenTelemetry config path if it exists
+        if [ -f "$LETTA_CONFIG_DIR/otel-config.yaml" ]; then
+            echo "Using custom OpenTelemetry configuration from $LETTA_CONFIG_DIR/otel-config.yaml"
+            export CUSTOM_OTEL_CONFIG="$LETTA_CONFIG_DIR/otel-config.yaml"
+        fi
+        
+        echo "Configuration loading completed."
+    else
+        echo "No custom configuration directory found or LETTA_CONFIG_DIR not set."
+    fi
+}
 
 # Function to wait for PostgreSQL to be ready
 wait_for_postgres() {
@@ -11,6 +43,9 @@ wait_for_postgres() {
         sleep 2
     done
 }
+
+# Load configuration from mounted volume first
+load_config
 
 # Check if we're configured for external Postgres
 if [ -n "$LETTA_PG_URI" ]; then
@@ -54,7 +89,10 @@ if [ "${SECURE:-false}" = "true" ]; then
 fi
 
 # Start OpenTelemetry Collector in the background
-if [ -n "$CLICKHOUSE_ENDPOINT" ] && [ -n "$CLICKHOUSE_PASSWORD" ]; then
+if [ -n "$CUSTOM_OTEL_CONFIG" ]; then
+    echo "Starting OpenTelemetry Collector with custom configuration..."
+    CONFIG_FILE="$CUSTOM_OTEL_CONFIG"
+elif [ -n "$CLICKHOUSE_ENDPOINT" ] && [ -n "$CLICKHOUSE_PASSWORD" ]; then
     echo "Starting OpenTelemetry Collector with Clickhouse export..."
     CONFIG_FILE="/etc/otel/config-clickhouse.yaml"
 else
