@@ -1,13 +1,11 @@
-"""
-Comprehensive Opik integration for Letta - LLM tracing and Agent tracing
-"""
+"""Comprehensive Opik integration for Letta - LLM tracing and Agent tracing"""
 
 import os
 import time
 import uuid
 from contextlib import asynccontextmanager
 from functools import wraps
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from letta.log import get_logger
 
@@ -23,72 +21,115 @@ _opik_initialized = False
 
 
 def check_opik_environment():
-    """
-    Check if Opik environment variables are configured
-    
+    """Check if Opik environment variables are configured for self-hosted deployment.
+
     Returns:
         bool: True if Opik is configured, False otherwise
     """
+    # Log all Opik-related environment variables for debugging
+    logger.info("=== OPIK ENVIRONMENT DEBUG ===")
+    opik_vars = {
+        "OPIK_URL_OVERRIDE": os.environ.get("OPIK_URL_OVERRIDE"),
+        "OPIK_API_KEY": os.environ.get("OPIK_API_KEY", "NOT_SET"),
+        "OPIK_PROJECT_NAME": os.environ.get("OPIK_PROJECT_NAME"),
+        "OPIK_WORKSPACE": os.environ.get("OPIK_WORKSPACE"),
+        "OPIK_TRACK_DISABLE": os.environ.get("OPIK_TRACK_DISABLE", "false"),
+        "OPIK_ENDPOINT": os.environ.get("OPIK_ENDPOINT"),
+    }
+
+    for var_name, var_value in opik_vars.items():
+        if var_name == "OPIK_API_KEY" and var_value != "NOT_SET":
+            logger.info(f"  {var_name}: [REDACTED - length: {len(var_value)}]")
+        else:
+            logger.info(f"  {var_name}: {var_value}")
+
+    logger.info("=== END OPIK ENVIRONMENT DEBUG ===")
+
     # Check if tracking is explicitly disabled
     if os.environ.get("OPIK_TRACK_DISABLE", "false").lower() == "true":
         logger.info("Opik tracking is disabled via OPIK_TRACK_DISABLE")
         return False
-    
-    # Check for required environment variables
+
+    # Check for required environment variables (only URL is required for self-hosted)
     opik_url = os.environ.get("OPIK_URL_OVERRIDE")
-    
+
     if not opik_url:
-        logger.debug("OPIK_URL_OVERRIDE not set, Opik tracing will be disabled")
+        logger.warning("OPIK_URL_OVERRIDE not set, Opik tracing will be disabled")
+        logger.info("To enable Opik tracing, set OPIK_URL_OVERRIDE environment variable")
         return False
-    
-    logger.info(f"Opik environment detected: {opik_url}")
+
+    logger.info(f"Opik environment detected with URL: {opik_url}")
+    logger.info("Self-hosted deployment detected - API key not required")
     return True
 
 
 def setup_opik_tracing():
-    """
-    Set up Opik tracing for Letta using environment variables
-    
-    Follows standard Opik SDK configuration pattern:
-    - OPIK_URL_OVERRIDE: Opik server URL
+    """Set up Opik tracing for Letta using environment variables for self-hosted deployment.
+
+    Self-hosted configuration:
+    - OPIK_URL_OVERRIDE: Opik server URL (required)
     - OPIK_API_KEY: API key (optional for self-hosted)
-    - OPIK_WORKSPACE: Workspace name (optional for self-hosted)
-    - OPIK_PROJECT_NAME: Project name (optional)
+    - OPIK_WORKSPACE: Workspace name (defaults to "default")
+    - OPIK_PROJECT_NAME: Project name (optional, not used for self-hosted)
     - OPIK_TRACK_DISABLE: Disable tracking (default: false)
     """
     global _opik_initialized
 
+    logger.info("=== OPIK TRACING SETUP ===")
+
     if _opik_initialized:
-        logger.debug("Opik tracing already initialized")
+        logger.info("Opik tracing already initialized, skipping setup")
         return
 
     # Check if Opik environment is configured
     if not check_opik_environment():
-        logger.debug("Opik environment not configured, skipping initialization")
+        logger.warning("Opik environment not configured, skipping initialization")
         return
 
     try:
+        logger.info("Attempting to import Opik SDK...")
         # Import Opik SDK
         import opik
-        
-        # Configure Opik using environment variables
-        opik.configure()
-        
-        _opik_initialized = True
-        
+
+        logger.info("Opik SDK imported successfully")
+
+        logger.info("Configuring Opik for self-hosted deployment...")
+
+        # Set up self-hosted configuration
         opik_url = os.environ.get("OPIK_URL_OVERRIDE")
-        project_name = os.environ.get("OPIK_PROJECT_NAME", "letta-traces")
-        
-        logger.info(f"Opik tracing initialized successfully")
+        workspace = os.environ.get("OPIK_WORKSPACE", "default")
+        use_local = os.environ.get("OPIK_USE_LOCAL", "true")
+
+        # Configure Opik for self-hosted deployment
+        # Note: use_local=True is for local development, not self-hosted
+        opik.configure(
+            url=opik_url,
+            use_local=use_local,  # False for self-hosted deployment
+            workspace=workspace,
+            automatic_approvals=True,
+        )
+
+        logger.info("Opik configuration completed")
+
+        _opik_initialized = True
+
+        logger.info("=== OPIK TRACING INITIALIZED SUCCESSFULLY ===")
         logger.info(f"  URL: {opik_url}")
-        logger.info(f"  Project: {project_name}")
+        logger.info(f"  Workspace: {workspace}")
+        logger.info("  Mode: Self-hosted (no API key required)")
+        logger.info("=== END OPIK SETUP ===")
 
     except ImportError as e:
-        logger.warning(f"Opik SDK not installed: {e}")
+        logger.error(f"Opik SDK not installed or import failed: {e}")
+        logger.info("Install Opik SDK with: pip install opik")
         logger.info("Continuing without Opik tracing")
         _opik_initialized = False
     except Exception as e:
-        logger.warning(f"Failed to initialize Opik tracing: {e}")
+        logger.error(f"Failed to initialize Opik tracing: {e}")
+        logger.error(f"Exception type: {type(e).__name__}")
+        import traceback
+
+        logger.error(f"Full traceback: {traceback.format_exc()}")
         logger.info("Continuing without Opik tracing")
         _opik_initialized = False
 
@@ -98,15 +139,23 @@ def is_opik_enabled() -> bool:
     return _opik_initialized
 
 
+def force_opik_initialization():
+    """Force re-initialization of Opik tracing - useful for debugging"""
+    global _opik_initialized
+    logger.info("=== FORCED OPIK INITIALIZATION ===")
+    _opik_initialized = False
+    setup_opik_tracing()
+    logger.info(f"Opik initialization result: {_opik_initialized}")
+    return _opik_initialized
+
+
 # =============================================================================
 # LLM Client Tracking
 # =============================================================================
 
 
 def track_llm_call(func):
-    """
-    Decorator to track LLM calls with Opik
-    """
+    """Decorator to track LLM calls with Opik"""
 
     def wrapper(*args, **kwargs):
         if not _opik_initialized:
@@ -131,8 +180,7 @@ def track_llm_call(func):
 
 
 def track_openai_client(openai_client):
-    """
-    Wrap OpenAI client with Opik tracking
+    """Wrap OpenAI client with Opik tracking
 
     Args:
         openai_client: OpenAI client instance
@@ -156,8 +204,7 @@ def track_openai_client(openai_client):
 
 
 def track_anthropic_client(anthropic_client):
-    """
-    Wrap Anthropic client with Opik tracking
+    """Wrap Anthropic client with Opik tracking
 
     Args:
         anthropic_client: Anthropic client instance
@@ -184,12 +231,11 @@ def log_llm_trace(
     model: str,
     input_text: str,
     output_text: str,
-    token_count: Optional[int] = None,
-    latency: Optional[float] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    token_count: int | None = None,
+    latency: float | None = None,
+    metadata: dict[str, Any] | None = None,
 ):
-    """
-    Log LLM trace data to Opik
+    """Log LLM trace data to Opik
 
     Args:
         model: Model name
@@ -239,10 +285,15 @@ class AgentTracer:
     def create_conversation_group(self, agent_id: str, user_id: str = None) -> str:
         """Create a conversation group ID for tracking multi-turn conversations"""
         group_id = f"conversation-{agent_id}-{uuid.uuid4().hex[:8]}"
-        self.conversation_groups[group_id] = {"agent_id": agent_id, "user_id": user_id, "created_at": time.time(), "message_count": 0}
+        self.conversation_groups[group_id] = {
+            "agent_id": agent_id,
+            "user_id": user_id,
+            "created_at": time.time(),
+            "message_count": 0,
+        }
         return group_id
 
-    def track_agent_step(self, agent_id: str, step_count: int, metadata: Dict[str, Any] = None):
+    def track_agent_step(self, agent_id: str, step_count: int, metadata: dict[str, Any] = None):
         """Track an agent step execution"""
         if not is_opik_enabled():
             return lambda func: func
@@ -257,7 +308,12 @@ class AgentTracer:
                     span_name = f"agent_step_{agent_id}_{step_count}"
 
                     # Build metadata
-                    trace_metadata = {"agent_id": agent_id, "step_count": step_count, "timestamp": time.time(), "operation": "agent_step"}
+                    trace_metadata = {
+                        "agent_id": agent_id,
+                        "step_count": step_count,
+                        "timestamp": time.time(),
+                        "operation": "agent_step",
+                    }
                     if metadata:
                         trace_metadata.update(metadata)
 
@@ -279,7 +335,12 @@ class AgentTracer:
                     from opik import track
 
                     span_name = f"agent_step_{agent_id}_{step_count}"
-                    trace_metadata = {"agent_id": agent_id, "step_count": step_count, "timestamp": time.time(), "operation": "agent_step"}
+                    trace_metadata = {
+                        "agent_id": agent_id,
+                        "step_count": step_count,
+                        "timestamp": time.time(),
+                        "operation": "agent_step",
+                    }
                     if metadata:
                         trace_metadata.update(metadata)
 
@@ -298,7 +359,7 @@ class AgentTracer:
 
         return decorator
 
-    def track_tool_execution(self, tool_name: str = None, agent_id: str = None, metadata: Dict[str, Any] = None):
+    def track_tool_execution(self, tool_name: str = None, agent_id: str = None, metadata: dict[str, Any] = None):
         """Track tool execution within an agent"""
         if not is_opik_enabled():
             return lambda func: func
@@ -345,7 +406,9 @@ class AgentTracer:
                         if hasattr(result, "status"):
                             trace_metadata["execution_status"] = result.status
                         if hasattr(result, "func_return"):
-                            trace_metadata["function_return"] = str(result.func_return)[:500]  # Truncate for readability
+                            trace_metadata["function_return"] = str(result.func_return)[
+                                :500
+                            ]  # Truncate for readability
 
                         return result
 
@@ -443,7 +506,7 @@ class AgentTracer:
             logger.error(f"Error in conversation tracing: {e}")
             yield group_id
 
-    def track_multi_agent_interaction(self, agents: List[str], interaction_type: str, metadata: Dict[str, Any] = None):
+    def track_multi_agent_interaction(self, agents: list[str], interaction_type: str, metadata: dict[str, Any] = None):
         """Track multi-agent interactions"""
         if not is_opik_enabled():
             return lambda func: func
@@ -514,17 +577,17 @@ class AgentTracer:
 agent_tracer = AgentTracer()
 
 
-def track_agent_step(agent_id: str, step_count: int, metadata: Dict[str, Any] = None):
+def track_agent_step(agent_id: str, step_count: int, metadata: dict[str, Any] = None):
     """Decorator for tracking agent steps"""
     return agent_tracer.track_agent_step(agent_id, step_count, metadata)
 
 
-def track_tool_execution(tool_name: str = None, agent_id: str = None, metadata: Dict[str, Any] = None):
+def track_tool_execution(tool_name: str = None, agent_id: str = None, metadata: dict[str, Any] = None):
     """Decorator for tracking tool executions"""
     return agent_tracer.track_tool_execution(tool_name, agent_id, metadata)
 
 
-def track_multi_agent_interaction(agents: List[str], interaction_type: str, metadata: Dict[str, Any] = None):
+def track_multi_agent_interaction(agents: list[str], interaction_type: str, metadata: dict[str, Any] = None):
     """Decorator for tracking multi-agent interactions"""
     return agent_tracer.track_multi_agent_interaction(agents, interaction_type, metadata)
 
@@ -534,7 +597,7 @@ def track_conversation(agent_id: str, user_message: str, group_id: str = None):
     return agent_tracer.track_conversation(agent_id, user_message, group_id)
 
 
-def log_agent_event(agent_id: str, event_type: str, data: Dict[str, Any] = None):
+def log_agent_event(agent_id: str, event_type: str, data: dict[str, Any] = None):
     """Log agent events for debugging and monitoring"""
     if not is_opik_enabled():
         return
@@ -542,7 +605,12 @@ def log_agent_event(agent_id: str, event_type: str, data: Dict[str, Any] = None)
     try:
         from opik import track
 
-        event_data = {"agent_id": agent_id, "event_type": event_type, "timestamp": time.time(), "operation": "agent_event"}
+        event_data = {
+            "agent_id": agent_id,
+            "event_type": event_type,
+            "timestamp": time.time(),
+            "operation": "agent_event",
+        }
         if data:
             event_data.update(data)
 

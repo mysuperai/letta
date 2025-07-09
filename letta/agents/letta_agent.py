@@ -33,7 +33,7 @@ from letta.log import get_logger
 from letta.orm.enums import ToolType
 from letta.otel.context import get_ctx_attributes
 from letta.otel.metric_registry import MetricRegistry
-from letta.otel.tracing import log_event, trace_method
+from letta.otel.tracing import log_event, trace_method, tracer
 from letta.otel.opik_integration import track_conversation, log_agent_event
 from letta.schemas.agent import AgentState, UpdateAgent
 from letta.schemas.enums import JobStatus, MessageRole, ProviderType
