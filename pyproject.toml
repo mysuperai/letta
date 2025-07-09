@@ -78,6 +78,7 @@ opentelemetry-api = "1.30.0"
 opentelemetry-sdk = "1.30.0"
 opentelemetry-instrumentation-requests = "0.51b0"
 opentelemetry-exporter-otlp = "1.30.0"
+opik = "^0.3.0"
 google-genai = {version = "^1.15.0", optional = true}
 faker = "^36.1.0"
 colorama = "^0.4.6"

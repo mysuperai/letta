@@ -1,7 +1,14 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "WebFetch(domain:www.comet.com)",
+      "Bash(rg:*)",
+      "Bash(uv run:*)",
+      "Bash(grep:*)",
+      "Bash(rm:*)",
+      "Bash(python test:*)",
+      "Bash(python3:*)"
     ],
     "deny": []
   }

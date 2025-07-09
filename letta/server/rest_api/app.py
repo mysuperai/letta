@@ -314,6 +314,16 @@ def create_application() -> "FastAPI":
         )
         setup_metrics(endpoint=otlp_endpoint, app=app, service_name=service_name)
 
+    # Set up Opik tracing for LLM calls (uses environment variables)
+    try:
+        from letta.otel.opik_integration import setup_opik_tracing
+        setup_opik_tracing()
+    except ImportError:
+        pass  # Opik SDK not available, continue without tracing
+    except Exception as e:
+        # Use print for consistency with the rest of the startup messages
+        print(f"⚠ Opik tracing setup failed: {e}")
+
     for route in v1_routes:
         app.include_router(route, prefix=API_PREFIX)
         # this gives undocumented routes for "latest" and bare api calls.

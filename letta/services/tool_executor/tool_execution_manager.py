@@ -8,6 +8,7 @@ from letta.orm.enums import ToolType
 from letta.otel.context import get_ctx_attributes
 from letta.otel.metric_registry import MetricRegistry
 from letta.otel.tracing import trace_method
+from letta.otel.opik_integration import track_tool_execution
 from letta.schemas.agent import AgentState
 from letta.schemas.sandbox_config import SandboxConfig
 from letta.schemas.tool import Tool
@@ -93,6 +94,7 @@ class ToolExecutionManager:
         self.sandbox_env_vars = sandbox_env_vars
 
     @trace_method
+    @track_tool_execution()  # Will extract tool info from method arguments
     async def execute_tool_async(
         self, function_name: str, function_args: dict, tool: Tool, step_id: str | None = None
     ) -> ToolExecutionResult:

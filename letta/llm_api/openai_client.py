@@ -25,6 +25,7 @@ from letta.llm_api.llm_client_base import LLMClientBase
 from letta.local_llm.constants import INNER_THOUGHTS_KWARG, INNER_THOUGHTS_KWARG_DESCRIPTION, INNER_THOUGHTS_KWARG_DESCRIPTION_GO_FIRST
 from letta.log import get_logger
 from letta.otel.tracing import trace_method
+from letta.otel.opik_integration import track_openai_client
 from letta.schemas.embedding_config import EmbeddingConfig
 from letta.schemas.enums import ProviderCategory, ProviderType
 from letta.schemas.letta_message_content import MessageContentType
@@ -254,6 +255,8 @@ class OpenAIClient(LLMClientBase):
         Performs underlying synchronous request to OpenAI API and returns raw response dict.
         """
         client = OpenAI(**self._prepare_client_kwargs(llm_config))
+        # Wrap client with Opik tracking
+        client = track_openai_client(client)
 
         response: ChatCompletion = client.chat.completions.create(**request_data)
         return response.model_dump()
@@ -265,6 +268,8 @@ class OpenAIClient(LLMClientBase):
         """
         kwargs = await self._prepare_client_kwargs_async(llm_config)
         client = AsyncOpenAI(**kwargs)
+        # Wrap client with Opik tracking
+        client = track_openai_client(client)
 
         response: ChatCompletion = await client.chat.completions.create(**request_data)
         return response.model_dump()

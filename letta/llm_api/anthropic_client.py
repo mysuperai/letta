@@ -31,6 +31,7 @@ from letta.llm_api.llm_client_base import LLMClientBase
 from letta.local_llm.constants import INNER_THOUGHTS_KWARG, INNER_THOUGHTS_KWARG_DESCRIPTION
 from letta.log import get_logger
 from letta.otel.tracing import trace_method
+from letta.otel.opik_integration import track_anthropic_client
 from letta.schemas.enums import ProviderCategory
 from letta.schemas.llm_config import LLMConfig
 from letta.schemas.message import Message as PydanticMessage
@@ -52,18 +53,24 @@ class AnthropicClient(LLMClientBase):
     @deprecated("Synchronous version of this is no longer valid. Will result in model_dump of coroutine")
     def request(self, request_data: dict, llm_config: LLMConfig) -> dict:
         client = self._get_anthropic_client(llm_config, async_client=False)
+        # Wrap client with Opik tracking
+        client = track_anthropic_client(client)
         response = client.beta.messages.create(**request_data)
         return response.model_dump()
 
     @trace_method
     async def request_async(self, request_data: dict, llm_config: LLMConfig) -> dict:
         client = await self._get_anthropic_client_async(llm_config, async_client=True)
+        # Wrap client with Opik tracking
+        client = track_anthropic_client(client)
         response = await client.beta.messages.create(**request_data)
         return response.model_dump()
 
     @trace_method
     async def stream_async(self, request_data: dict, llm_config: LLMConfig) -> AsyncStream[BetaRawMessageStreamEvent]:
         client = await self._get_anthropic_client_async(llm_config, async_client=True)
+        # Wrap client with Opik tracking
+        client = track_anthropic_client(client)
         request_data["stream"] = True
         return await client.beta.messages.create(**request_data)
 

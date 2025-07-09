@@ -33,7 +33,8 @@ from letta.log import get_logger
 from letta.orm.enums import ToolType
 from letta.otel.context import get_ctx_attributes
 from letta.otel.metric_registry import MetricRegistry
-from letta.otel.tracing import log_event, trace_method, tracer
+from letta.otel.tracing import log_event, trace_method
+from letta.otel.opik_integration import track_conversation, log_agent_event
 from letta.schemas.agent import AgentState, UpdateAgent
 from letta.schemas.enums import JobStatus, MessageRole, ProviderType
 from letta.schemas.letta_message import MessageType
@@ -170,13 +171,31 @@ class LettaAgent(BaseAgent):
         agent_state = await self.agent_manager.get_agent_by_id_async(
             agent_id=self.agent_id, include_relationships=["tools", "memory", "tool_exec_environment_variables"], actor=self.actor
         )
-        _, new_in_context_messages, stop_reason, usage = await self._step(
-            agent_state=agent_state,
-            input_messages=input_messages,
-            max_steps=max_steps,
-            run_id=run_id,
-            request_start_timestamp_ns=request_start_timestamp_ns,
-        )
+        
+        # Log agent step start
+        user_message = input_messages[0].text if input_messages else ""
+        log_agent_event(self.agent_id, "step_start", {
+            "max_steps": max_steps,
+            "run_id": run_id,
+            "user_message": user_message
+        })
+        
+        # Track conversation with Opik
+        async with track_conversation(self.agent_id, user_message) as group_id:
+            _, new_in_context_messages, stop_reason, usage = await self._step(
+                agent_state=agent_state,
+                input_messages=input_messages,
+                max_steps=max_steps,
+                run_id=run_id,
+                request_start_timestamp_ns=request_start_timestamp_ns,
+            )
+            
+            # Log agent step completion
+            log_agent_event(self.agent_id, "step_complete", {
+                "stop_reason": stop_reason.stop_reason if stop_reason else None,
+                "usage": usage.model_dump() if usage else None,
+                "group_id": group_id
+            })
         return _create_letta_response(
             new_in_context_messages=new_in_context_messages,
             use_assistant_message=use_assistant_message,
