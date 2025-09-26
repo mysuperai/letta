@@ -121,6 +121,7 @@ def setup_tracing(
     endpoint: str,
     app: Optional[FastAPI] = None,
     service_name: str = "memgpt-server",
+    tempo_endpoint: Optional[str] = None,
 ) -> None:
     if is_pytest_environment():
         return
@@ -130,6 +131,12 @@ def setup_tracing(
 
     tracer_provider = TracerProvider(resource=get_resource(service_name))
     tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=endpoint)))
+
+    # Add secondary exporter for Tempo if configured
+    if tempo_endpoint:
+        logger.info(f"Adding Tempo exporter: {tempo_endpoint}")
+        tracer_provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter(endpoint=tempo_endpoint)))
+
     _is_tracing_initialized = True
     trace.set_tracer_provider(tracer_provider)
 
