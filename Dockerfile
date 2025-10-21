@@ -45,7 +45,7 @@ RUN poetry lock && \
 FROM ankane/pgvector:v0.5.1 AS runtime
 
 # Overridable Node.js version with --build-arg NODE_VERSION
-ARG NODE_VERSION=22
+ARG NODE_VERSION=25
 
 RUN apt-get update && \
     # Install curl and Python
